@@ -425,7 +425,7 @@ async def edit_price(update: Update, context: CallbackContext):
     await update.message.reply_text(f"✅ Price for product `{product}` updated to ${new_price:.2f}.")
 
 def main():
-    application = Application.builder().token("7552963790:AAFDuDy1UQh8ymn2ZG7AWiR8xPUIwDP5qrM").build()
+    application = Application.builder().token("8064095500:AAFzCT4dSJZlfMy-vUKiLGkD2KOZW5UlGNo").build()
 
     conversation_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^MLBB$"), handle_mlbb)],
