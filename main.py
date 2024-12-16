@@ -9,6 +9,7 @@ import qrcode
 from qrcode.constants import ERROR_CORRECT_L
 import http.client
 import json
+import os
 from keep_alive import keep_alive
 
 keep_alive()
@@ -22,18 +23,17 @@ khqr = KHQR(BAKONG_TOKEN)
 
 # Conversation states
 MLBB_ORDER = 0
-# ========================================================
-PASSWORD = "hjstarwar1688"
+# List to store user IDs
+USER_IDS = set()
+# List to store authorized user IDs
+AUTHORIZED_USERS = set()
 
-# Store authenticated users
-authenticated_users = set()
-
-# ID of the group where alerts will be sent
-ALERT_GROUP_ID = -1002389771587  # Replace with your group ID
-# ========================================================
+# Load authorized users from a file (if it exists)
+if os.path.exists("authorized_users.txt"):
+    with open("authorized_users.txt", "r") as file:
+        AUTHORIZED_USERS = set(map(int, file.read().splitlines()))
 # Product prices
 PRODUCTS = {
-    "test": 0.1,
     "86": 1.05, 
     "172": 2.10, 
     "112": 1.85, 
@@ -72,85 +72,84 @@ PRODUCTS = {
 
 
 async def start(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
+    user_id = update.message.from_user.id
 
-    # Check if the user is already authenticated
-    if user_id in authenticated_users:
-        keyboard = [[KeyboardButton("MLBB"), KeyboardButton("FF")]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text(
-            "Welcome back to Top-Up Bot!\n\n"
-            "Choose a game to top up:",
-            reply_markup=reply_markup
-        )
+    # Check if the user is authorized
+    if not is_user_authorized(user_id):
+        await update.message.reply_text("❌ You are not authorized to use this bot.")
         return
-    
-    # If user is not authenticated, ask for the password
+
+    USER_IDS.add(user_id)  # Track all active users
+
+    keyboard = [
+        [KeyboardButton("MLBB"), KeyboardButton("FF")],
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
     await update.message.reply_text(
-        "🔐 Please enter the password to access the bot:"
+        "Welcome to Top-Up Bot!\n\n"
+        "Choose a game to top up:",
+        reply_markup=reply_markup
     )
-# ======================================================================================
-async def handle_password(update: Update, context: CallbackContext):
-    user_id = update.effective_user.id
-    user_input = update.message.text.strip()
 
-    if user_input == PASSWORD:
-        if user_id not in authenticated_users:  # Avoid duplicate users
-            authenticated_users.add(user_id)
+def save_authorized_users():
+    with open("authorized_users.txt", "w") as file:
+        for user_id in AUTHORIZED_USERS:
+            file.write(f"{user_id}\n")
+def is_user_authorized(user_id):
+    """Check if a user is authorized to use the bot."""
+    return user_id in AUTHORIZED_USERS
 
-            # Get user details for alert
-            username = update.effective_user.username if update.effective_user.username else "No Username"
-            full_name = f"{update.effective_user.first_name} {update.effective_user.last_name}" if update.effective_user.last_name else update.effective_user.first_name
-            
-            # Alert the group with the username and Telegram ID
-            alert_message = (
-                f"🚀 **New User Accessed the Bot!**\n"
-                f"👤 **Name:** {full_name}\n"
-                f"📛 **Username:** @{username}\n"
-                f"🆔 **Telegram ID:** `{user_id}`"
-            )
-            try:
-                await context.bot.send_message(chat_id=ALERT_GROUP_ID, text=alert_message, parse_mode="Markdown")
-            except Exception as e:
-                print(f"⚠️ Failed to send alert to group: {e}")
-        
-        # Send the user a success message
-        keyboard = [[KeyboardButton("MLBB"), KeyboardButton("FF")]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        
-        await update.message.reply_text(
-            "✅ Password accepted!\nWelcome to Top-Up Bot.\n\n"
-            "Choose a game to top up:",
-            reply_markup=reply_markup
-        )
-    else:
-        await update.message.reply_text("❌ Incorrect password. Please try again.")
+async def add_user(update: Update, context: CallbackContext):
+    """Add a user to the authorized users list."""
+    admin_id = 6979490626  # Replace this with your admin user ID
+    user_id = update.message.from_user.id
 
-# ======================================================================================
-async def remove_user(update: Update, context: CallbackContext):
+    if user_id != admin_id:
+        await update.message.reply_text("❌ You don't have permission to add users.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("❌ Please provide a user ID to add. Example: /adduser 123456789")
+        return
+
     try:
-        # Get the user ID from the command argument
-        telegram_id = int(context.args[0])  # Extract ID from command argument
-
-        if telegram_id in authenticated_users:
-            authenticated_users.remove(telegram_id)
-            await update.message.reply_text(f"✅ Successfully removed user with Telegram ID: `{telegram_id}`", parse_mode="Markdown")
-            
-            # Alert the group
-            alert_message = f"🚫 **User Removed from Access List!**\n🆔 **Telegram ID:** `{telegram_id}`"
-            try:
-                await context.bot.send_message(chat_id=ALERT_GROUP_ID, text=alert_message, parse_mode="Markdown")
-            except Exception as e:
-                print(f"⚠️ Failed to send alert to group: {e}")
+        new_user_id = int(context.args[0])
+        if new_user_id in AUTHORIZED_USERS:
+            await update.message.reply_text(f"ℹ️ User {new_user_id} is already authorized.")
         else:
-            await update.message.reply_text(f"⚠️ User with Telegram ID `{telegram_id}` is not in the authenticated list.", parse_mode="Markdown")
-    except (IndexError, ValueError):
-        await update.message.reply_text("❌ Please provide a valid Telegram ID to remove. Example: `/remove_user 123456789`")
-    except Exception as e:
-        print(f"⚠️ Unknown error occurred: {e}")
+            AUTHORIZED_USERS.add(new_user_id)
+            save_authorized_users()  # Save the list to the file
+            await update.message.reply_text(f"✅ User {new_user_id} has been authorized.")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID. Please enter a numeric user ID.")
 
 
-# ======================================================================================
+async def remove_user(update: Update, context: CallbackContext):
+    """Remove a user from the authorized users list."""
+    admin_id = 6979490626  # Replace this with your admin user ID
+    user_id = update.message.from_user.id
+
+    if user_id != admin_id:
+        await update.message.reply_text("❌ You don't have permission to remove users.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("❌ Please provide a user ID to remove. Example: /removeuser 123456789")
+        return
+
+    try:
+        remove_user_id = int(context.args[0])
+        if remove_user_id not in AUTHORIZED_USERS:
+            await update.message.reply_text(f"ℹ️ User {remove_user_id} is not in the authorized user list.")
+        else:
+            AUTHORIZED_USERS.remove(remove_user_id)
+            save_authorized_users()  # Save the list to the file
+            await update.message.reply_text(f"✅ User {remove_user_id} has been removed from the authorized user list.")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID. Please enter a numeric user ID.")
+
+
 async def handle_mlbb(update: Update, context: CallbackContext):
     price_list = (
         "Products List Mobile Legends\n\n" +
@@ -161,8 +160,44 @@ async def handle_mlbb(update: Update, context: CallbackContext):
     )
     await update.message.reply_text(price_list, parse_mode="Markdown")
     return MLBB_ORDER
+# ======================================================================================================
+async def broadcast(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    admin_id = 6979490626  # Replace this with your admin user ID
+    
+    if user_id != admin_id:
+        await update.message.reply_text("❌ You don't have permission to broadcast messages.")
+        return
 
+    if not context.args:
+        await update.message.reply_text("❌ Please provide a message to broadcast. Example:\n/broadcast Hello everyone!")
+        return
+
+    message = " ".join(context.args)
+
+    sent_count = 0
+    failed_count = 0
+
+    for user_id in USER_IDS:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message)
+            sent_count += 1
+        except Exception as e:
+            logger.error(f"Failed to send message to {user_id}: {e}")
+            failed_count += 1
+
+    await update.message.reply_text(f"✅ Broadcast complete.\nSent: {sent_count}\nFailed: {failed_count}")
+
+# ======================================================================================================
 async def handle_mlbb_order(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+
+    # Check if the user is authorized
+    if not is_user_authorized(user_id):
+        await update.message.reply_text("❌ You are not authorized to use this bot.")
+        return
+
+    USER_IDS.add(user_id)  # Track active users
     user_input = update.message.text.strip()
 
     try:
@@ -332,7 +367,7 @@ async def send_order_to_channel(context: CallbackContext,
 
 def generate_qr_code(amount, username, user_id, server, product):
     # Define QR code generation parameters
-    bank_account = "hj_xbor@wing"
+    bank_account = "lyhang_hyper@aclb"
     merchant_name = "Game Top-Up"
     merchant_city = "Phnom Penh"
     currency = "USD"
@@ -425,7 +460,7 @@ async def edit_price(update: Update, context: CallbackContext):
     await update.message.reply_text(f"✅ Price for product `{product}` updated to ${new_price:.2f}.")
 
 def main():
-    application = Application.builder().token("8064095500:AAFzCT4dSJZlfMy-vUKiLGkD2KOZW5UlGNo").build()
+    application = Application.builder().token("7639850946:AAGhrEvtGEWdPDJ7b8qeOdiOLlr8lNXw6ME").build()
 
     conversation_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^MLBB$"), handle_mlbb)],
@@ -439,11 +474,9 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Regex("^FF$"), handle_ff))
     application.add_handler(CommandHandler("edit_price", edit_price))  # Add this line
-# Handles user input after /start for password entry
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password))
-
-        # Handles the /remove_user command
-    application.add_handler(CommandHandler("remove_user", remove_user))
+    application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("adduser", add_user))
+    application.add_handler(CommandHandler("removeuser", remove_user))
 
     application.run_polling()
 
