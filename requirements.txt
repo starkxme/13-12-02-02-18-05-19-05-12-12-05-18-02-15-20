@@ -7,3 +7,4 @@ pip==24.3.1
 bakong-khqr==0.2.8
 python-telegram-bot==20.1
 flask==2.3.2  # or the latest version
+Pillow
