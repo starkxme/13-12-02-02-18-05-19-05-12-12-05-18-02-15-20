@@ -34,9 +34,8 @@ if os.path.exists("authorized_users.txt"):
         AUTHORIZED_USERS = set(map(int, file.read().splitlines()))
 # Product prices
 PRODUCTS = {
-    "86": 1.05, 
-    "172": 2.10, 
-    "112": 1.85, 
+    "86": 1.06, 
+    "172": 2.12, 
     "257": 3.11, 
     "343": 4.09,
     "429": 5.21,
@@ -367,8 +366,8 @@ async def send_order_to_channel(context: CallbackContext,
 
 def generate_qr_code(amount, username, user_id, server, product):
     # Define QR code generation parameters
-    bank_account = "lyhang_hyper@aclb"
-    merchant_name = "Game Top-Up"
+    bank_account = "hj_xbot@wing"
+    merchant_name = "Top-up Reseller"
     merchant_city = "Phnom Penh"
     currency = "USD"
     store_label = f"Top-Up {username}"
